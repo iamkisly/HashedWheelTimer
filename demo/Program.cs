@@ -10,10 +10,7 @@ namespace Demo
     {
         static async Task Main(string[] args)
         {
-            var ms =TimeSpan.Parse("00:00:00.0010000").TotalMicroseconds;
-            
             var cts = new CancellationTokenSource();
-
             
             var loggerFactory = LoggerFactory.Create(builder => {
                 builder
@@ -24,10 +21,10 @@ namespace Demo
             var timerFactory = new TimerFactory(loggerFactory);
             var timer = timerFactory.Create(builder => {
                 builder
-                    .SetTickInterval(TimeSpan.FromMilliseconds(100))
+                    .SetTickInterval(TimeSpan.FromMilliseconds(5000))
                     .SetBucketCount(128);
             });
-            
+            /*
             var timerTask = timer.RunAsync(cts.Token);
 
             var now = PreciseTimeSpanExtensions.Elapsed;
@@ -42,16 +39,14 @@ namespace Demo
             }
             await Task.Delay(TimeSpan.FromSeconds(100), cts.Token);
             //cts.Cancel();
-            
-            
 
             var timeouts = timer.Stop();
 
             Console.ReadLine();
-            
-            
+
+            */
             // Cancellation WaitNextTick test 
-            /*
+            
             var worker = new Worker(timer);
             
             Console.WriteLine(DateTime.Now);
@@ -59,19 +54,22 @@ namespace Demo
             try
             {
                 Task.WaitAll(
-                    Task.Delay(TimeSpan.FromSeconds(5), cts.Token).ContinueWith(task => { 
+                    Task.Delay(TimeSpan.FromSeconds(3), cts.Token).ContinueWith(task => { 
                         cts.Cancel();
                         Console.WriteLine("Token cancelled");
                     }, cts.Token),
 
-                    Elapse(worker, cts.Token),
-                    Elapse(worker, CancellationToken.None)
+                    Task.Run(async () => await worker.WaitNextTick(cts.Token))
+                        .ContinueWith((task) => Console.WriteLine($"1 {DateTime.Now}"), cts.Token),
+                    
+                    Task.Run(async () => await worker.WaitNextTick(CancellationToken.None))
+                        .ContinueWith((task) => Console.WriteLine($"2 {DateTime.Now}"))
                 );
             }
             catch (AggregateException ex) { 
-                if (ex.InnerException is OperationCanceledException && worker.Shutdown) 
+                if (ex.InnerException is OperationCanceledException) 
                 {
-                    Console.WriteLine("Graceful Shutdown");
+                    Console.WriteLine("OperationCanceled");
                     Console.WriteLine(ex);
                     Console.WriteLine(ex.Message);
                     Console.WriteLine(ex.InnerException);
@@ -80,14 +78,7 @@ namespace Demo
 
             Console.WriteLine(DateTime.Now);
             worker.Stop();
-            */
-        }
-
-
-        async static Task Elapse(Worker worker, CancellationToken cancellationToken)
-        {
-            var time = await worker.WaitNextTick(cancellationToken);
-            Console.WriteLine($"{time}");
+            
         }
     }
 }
