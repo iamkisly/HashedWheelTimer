@@ -14,7 +14,6 @@ namespace HashedWheelTimer
     public sealed partial class HashedWheelTimer : ITimer
     {
         private readonly ILogger<HashedWheelTimer> _logger;
-        private readonly CancellationTokenSource _cancellationTokenSource = new();
 
         private readonly long _maxPendingTimeouts;
         private long _pendingTimeouts;
@@ -92,9 +91,7 @@ namespace HashedWheelTimer
             return timeout;
 
         }
-
-        internal CancellationToken CancellationToken => _cancellationTokenSource.Token;
-
+        
         public async Task RunAsync(CancellationToken cancellationToken)
         {
             if (_worker.Shutdown)
@@ -104,10 +101,7 @@ namespace HashedWheelTimer
             else if (_worker.Started) { }
             else
             {
-                await using (cancellationToken.Register(_cancellationTokenSource.Cancel))
-                {
-                    await _worker.RunAsync(_cancellationTokenSource.Token).ConfigureAwait(false);
-                }
+                await _worker.RunAsync(cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -165,7 +159,11 @@ namespace HashedWheelTimer
                     await semaphore.WaitAsync(cancellationToken);
                     tasks.Add(Task.Run(async () =>
                     {
-                        try { await timeout.ExpireAsync(cancellationToken); }
+                        try
+                        {
+                            await timeout.ExpireAsync(cancellationToken);
+                            // if (timeout.Repeated) { }
+                        }
                         finally { semaphore.Release(); }
                     }, cancellationToken));
                 }
@@ -195,7 +193,8 @@ namespace HashedWheelTimer
             }
         }
 
-        private sealed class HashedWheelTimeout(ITimerTask task, TimeSpan deadline, int remainingRounds = 0) : ITimeout
+        private sealed class HashedWheelTimeout(ITimerTask task, TimeSpan deadline, 
+            int remainingRounds = 0, int repeatingRounds = -1) : ITimeout
         {
             public TimeSpan Deadline { get; } = deadline;
             public ITimerTask Task { get; } = task;

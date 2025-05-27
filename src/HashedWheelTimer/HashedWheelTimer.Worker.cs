@@ -11,45 +11,36 @@ namespace HashedWheelTimer
     {
         public sealed class Worker(HashedWheelTimer timer)
         {
-            private readonly TaskCompletionSource _completionSource = new();
             private long _wheelTick;
 
             public long Tick => _wheelTick;
             private WorkerState State { get; set; } = WorkerState.None;
             public bool Started => State == WorkerState.Started;
             public bool Shutdown => State == WorkerState.Shutdown;
-
-            public Task ClosedFuture => _completionSource.Task;
-
+            
             public async Task RunAsync(CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                try
+
+                timer.StartTime = PreciseTimeSpanExtensions.Elapsed;
+                if (timer.StartTime <= PreciseTimeSpan.Zero)
+                    timer.StartTime = PreciseTimeSpan.FromTicks(1);
+
+                State = WorkerState.Started;
+                while (cancellationToken.IsCancellationRequested == false)
                 {
-                    timer.StartTime = PreciseTimeSpanExtensions.Elapsed;
-                    if (timer.StartTime <= PreciseTimeSpan.Zero)
-                        timer.StartTime = PreciseTimeSpan.FromTicks(1);
+                    var deadline = await WaitNextTick(cancellationToken).ConfigureAwait(false);
 
-                    State = WorkerState.Started;
-                    while (cancellationToken.IsCancellationRequested == false)
-                    {
-                        var deadline = await WaitNextTick(cancellationToken).ConfigureAwait(false);
+                    if (!Started) break;
+                    if (deadline <= TimeSpan.Zero) continue;
+                    
+                    var idx = timer._mask & (int)_wheelTick;
+                    var bucket = timer._buckets[idx];
 
-                        if (!Started) break;
-                        if (deadline <= TimeSpan.Zero) continue;
-                        
-                        var idx = timer._mask & (int)_wheelTick;
-                        var bucket = timer._buckets[idx];
-
-                        await bucket.ExpireTimeoutsAsync(deadline, 8, cancellationToken)
-                            .ConfigureAwait(false);
-                        bucket.ReduceRound(cancellationToken);
-                        _wheelTick++;
-                    }
-                }
-                finally
-                {
-                    _completionSource.TrySetResult();
+                    await bucket.ExpireTimeoutsAsync(deadline, 8, cancellationToken)
+                        .ConfigureAwait(false);
+                    bucket.ReduceRound(cancellationToken);
+                    _wheelTick++;
                 }
             }
 
@@ -70,7 +61,7 @@ namespace HashedWheelTimer
 
                     if (sleepTime > TimeSpan.Zero)
                     {
-                        await Task.Delay(sleepTime.CeilingToMilliseconds(), timer.CancellationToken)
+                        await Task.Delay(sleepTime.CeilingToMilliseconds(), cancellationToken)
                                   .ConfigureAwait(false);
                     }
                     else
