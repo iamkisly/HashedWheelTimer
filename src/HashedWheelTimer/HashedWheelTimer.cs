@@ -1,13 +1,12 @@
-﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
-using System;
-using System.Collections.Concurrent;
+﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Linq;
+using System.Net.Sockets;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
 namespace HashedWheelTimer
 {
@@ -49,7 +48,7 @@ namespace HashedWheelTimer
             _buckets = new HashedWheelBucket[_bucketCount];
             for (var i = 0; i < _bucketCount; i++)
             {
-                var bucket = new HashedWheelBucket();
+                var bucket = new HashedWheelBucket(RepeatTimeout);
                 _buckets[i] = bucket;
             }
 
@@ -57,8 +56,9 @@ namespace HashedWheelTimer
         }
 
         private PreciseTimeSpan StartTime { get; set; }
+        private long _timeoutId = -1;
 
-        public ITimeout CreateTimeout(ITimerTask task, TimeSpan delay)
+        public ITimeout CreateTimeout(ITimerTask task, TimeSpan delay, int reccuring = -1)
         {
             ArgumentNullException.ThrowIfNull(task);
             if (_worker.Shutdown)
@@ -69,29 +69,44 @@ namespace HashedWheelTimer
             {
                 if (_pendingTimeouts >= _maxPendingTimeouts)
                 {
-                    throw new NotImplementedException("Decrease pending timeouts trouble");
                     throw new RejectedExecutionException(
-                        $"Number of pending timeouts ({_pendingTimeouts}) is greater than " +
+                        $"Number of pending timeouts ({_pendingTimeouts +1}) is greater than " +
                         $"or equal to maximum allowed pending timeouts ({_maxPendingTimeouts})");
                 }
-                _pendingTimeouts++;
+                Interlocked.Increment(ref _pendingTimeouts);
             }
             
             var deadline = (delay.Deadline() - StartTime).ToTimeSpan().CeilingToMilliseconds();
-            var calculated = deadline.Ticks / _tickDuration;
 
-            var tick = _worker.Tick;
-            
-            // Вычисляем сколько всего тиков осталось, и в итоге полных оборотов колеса
-            var remaining = (calculated - tick) / _bucketCount;
-            var bucketIndex = Math.Max(calculated, tick) & _mask;
+            var (remaining, bucketIndex) = CalculateTimeoutPosition(deadline);
 
-            var timeout = new HashedWheelTimeout(task, deadline, (int)remaining);
+            _timeoutId++;
+            var timeout = new HashedWheelTimeout(
+                id: _timeoutId, 
+                task: task,
+                deadline: deadline, 
+                interval: delay, 
+                remaining: remaining,
+                recurring: reccuring,
+                onComplete: (timeout) =>
+                {
+                    if (_maxPendingTimeouts > 0)
+                        Interlocked.Decrement(ref _pendingTimeouts);
+                });
             _buckets[bucketIndex].AddTimeout(timeout);
             return timeout;
 
         }
-        
+
+        private void RepeatTimeout(HashedWheelTimeout timeout)
+        {
+            timeout.Deadline += timeout.Interval;
+            var (remaining, bucketIndex) = CalculateTimeoutPosition(timeout.Deadline);
+            timeout.RemainingRounds = remaining;
+            timeout.RecurringRounds--;
+            _buckets[bucketIndex].AddTimeout(timeout);
+        }
+
         public async Task RunAsync(CancellationToken cancellationToken)
         {
             if (_worker.Shutdown)
@@ -111,8 +126,19 @@ namespace HashedWheelTimer
             return _buckets.SelectMany(bucket => bucket.UnprocessedTimeouts);
         }
 
+        (int bucketIndex, int remainingRounds) CalculateTimeoutPosition(TimeSpan deadline)
+        {
+            var calculated = deadline.Ticks / _tickDuration;
+            var tick = _worker.Tick;
+
+            // Вычисляем сколько всего тиков осталось, и в итоге полных оборотов колеса
+            var remaining = (calculated - tick) / _bucketCount;
+            var bucketIndex = Math.Max(calculated, tick) & _mask;
+            return ((int)remaining, (int)bucketIndex);
+        }
+
         [DebuggerDisplay("Count = {DebugCount}")]
-        private sealed class HashedWheelBucket
+        private sealed class HashedWheelBucket(Action<HashedWheelTimeout>? onRecurring = null)
         {
             private readonly ConcurrentQueue<HashedWheelTimeout> _currentTickTimeouts = new();
             private readonly ConcurrentQueue<HashedWheelTimeout> _remainingTimeouts = new();
@@ -162,9 +188,15 @@ namespace HashedWheelTimer
                         try
                         {
                             await timeout.ExpireAsync(cancellationToken);
-                            // if (timeout.Repeated) { }
+                            if (timeout is { RecurringRounds: > 0, Canceled: false }) 
+                            {
+                                onRecurring?.Invoke(timeout);
+                            }
                         }
-                        finally { semaphore.Release(); }
+                        finally 
+                        { 
+                            semaphore.Release(); 
+                        }
                     }, cancellationToken));
                 }
 
@@ -192,14 +224,19 @@ namespace HashedWheelTimer
                 }
             }
         }
-
-        private sealed class HashedWheelTimeout(ITimerTask task, TimeSpan deadline, 
-            int remainingRounds = 0, int repeatingRounds = -1) : ITimeout
+        
+        private sealed class HashedWheelTimeout(
+            long id, ITimerTask task, TimeSpan deadline, TimeSpan interval, int remaining = 0, int recurring = 0, 
+            Action<HashedWheelTimeout>? onComplete = null
+        ) : ITimeout
         {
-            public TimeSpan Deadline { get; } = deadline;
-            public ITimerTask Task { get; } = task;
-            public int RemainingRounds { get; internal set; } = remainingRounds;
+            public long Id => id;
+            public TimeSpan Deadline { get; internal set; } = deadline;
+            public TimeSpan Interval { get; } = interval;
 
+            public ITimerTask Task { get; } = task;
+            public int RemainingRounds { get; internal set; } = remaining;
+            public int RecurringRounds { get; internal set; } = recurring;
             private TimerState State { get; set; } = TimerState.None;
             public bool Expired => State == TimerState.Expired;
             public bool Canceled => State == TimerState.Canceled;
@@ -209,7 +246,11 @@ namespace HashedWheelTimer
                 if (State is TimerState.Expired or TimerState.Canceled)
                     return;
 
-                State = TimerState.Expired;
+                if (RecurringRounds == 0 && !Canceled)
+                {
+                    onComplete?.Invoke(this);
+                    State = TimerState.Expired;
+                }
                 await Task.RunAsync(this, cancellationToken).ConfigureAwait(false);
             }
 

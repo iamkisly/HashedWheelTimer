@@ -17,7 +17,7 @@ namespace HashedWheelTimer
         /// <param name="task">The task to execute after the delay.</param>
         /// <param name="delay">The delay after which the task will execute.</param>
         /// <returns>A handle which is associated with the specified task.</returns>
-        ITimeout CreateTimeout(ITimerTask task, TimeSpan delay);
+        ITimeout CreateTimeout(ITimerTask task, TimeSpan delay, int reccuring);
 
         /// <summary>
         /// Releases all resources acquired by this <see cref="ITimer"/> and cancels all tasks which were scheduled but not executed yet.
