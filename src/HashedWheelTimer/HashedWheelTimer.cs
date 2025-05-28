@@ -58,7 +58,7 @@ namespace HashedWheelTimer
         private PreciseTimeSpan StartTime { get; set; }
         private long _timeoutId = -1;
 
-        public ITimeout CreateTimeout(ITimerTask task, TimeSpan delay, int reccuring = -1)
+        public ITimeout CreateTimeout(ITimerTask task, TimeSpan delay, int reccuring = 0)
         {
             ArgumentNullException.ThrowIfNull(task);
             if (_worker.Shutdown)
@@ -246,7 +246,7 @@ namespace HashedWheelTimer
                 if (State is TimerState.Expired or TimerState.Canceled)
                     return;
 
-                if (RecurringRounds == 0 && !Canceled)
+                if (RecurringRounds <= 0 && !Canceled)
                 {
                     onComplete?.Invoke(this);
                     State = TimerState.Expired;
