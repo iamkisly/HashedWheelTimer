@@ -3,17 +3,19 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.12.35514.174
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo", "demo\Demo.csproj", "{7D290CF5-4C1C-4FA9-A7F1-6355D005F74E}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HashedWheelTimer", "src\HashedWheelTimer\HashedWheelTimer.csproj", "{921D0712-2A77-46ED-9C37-718B0150D0C5}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "demos", "demos", "{8A97792D-37C5-48E0-9F6A-CD1555C4F641}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo.Basic", "demos\Demo.Basic\Demo.Basic.csproj", "{BD4E4B73-C46C-46AD-9F59-805E31433BE6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Demo.Cancellation", "demos\Demo.Cancellation\Demo.Cancellation.csproj", "{7D290CF5-4C1C-4FA9-A7F1-6355D005F74E}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "temp", "temp", "{E9DC30A2-21A0-4247-A7E4-B6BB305AFCB1}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TimerTest", "temp\TimerTest\TimerTest.csproj", "{4FA9F99E-128F-41FC-9D40-6464FA9F4426}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{1EF6AC09-4CCF-4A83-B574-AB8199B7F012}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HashedWheelTimer", "src\HashedWheelTimer\HashedWheelTimer.csproj", "{921D0712-2A77-46ED-9C37-718B0150D0C5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{4FA9F99E-128F-41FC-9D40-6464FA9F4426}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4FA9F99E-128F-41FC-9D40-6464FA9F4426}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4FA9F99E-128F-41FC-9D40-6464FA9F4426}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BD4E4B73-C46C-46AD-9F59-805E31433BE6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BD4E4B73-C46C-46AD-9F59-805E31433BE6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BD4E4B73-C46C-46AD-9F59-805E31433BE6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BD4E4B73-C46C-46AD-9F59-805E31433BE6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -41,5 +47,6 @@ Global
 		{7D290CF5-4C1C-4FA9-A7F1-6355D005F74E} = {8A97792D-37C5-48E0-9F6A-CD1555C4F641}
 		{921D0712-2A77-46ED-9C37-718B0150D0C5} = {1EF6AC09-4CCF-4A83-B574-AB8199B7F012}
 		{4FA9F99E-128F-41FC-9D40-6464FA9F4426} = {E9DC30A2-21A0-4247-A7E4-B6BB305AFCB1}
+		{BD4E4B73-C46C-46AD-9F59-805E31433BE6} = {8A97792D-37C5-48E0-9F6A-CD1555C4F641}
 	EndGlobalSection
 EndGlobal

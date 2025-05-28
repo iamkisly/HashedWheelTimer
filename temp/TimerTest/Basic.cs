@@ -230,19 +230,20 @@ namespace TimerTest
         [Fact]
         public void TestNewTimeoutShouldStopThrowingRejectedExecutionExceptionWhenExistingTimeoutIsCancelled()
         {
-            const int tickDurationMs = 100;
+            const int tickDuration = 100;
             var timer = _timerFactory.Create(builder => {
                 builder
-                    .SetTickInterval(TimeSpan.FromMilliseconds(tickDurationMs))
+                    .SetTickInterval(TimeSpan.FromMilliseconds(tickDuration))
                     .SetBucketCount(32)
                     .SetMaxPendingTimeouts(2);
             });
             timer.RunAsync(CancellationToken.None);
-            timer.CreateTimeout(CreateNoOpTimerTask(), TimeSpan.FromSeconds(5));
-            var timeoutToCancel = timer.CreateTimeout(CreateNoOpTimerTask(), TimeSpan.FromSeconds(5));
+
+            timer.CreateTimeout(CreateNoOpTimerTask(), TimeSpan.FromSeconds(1));
+            var timeoutToCancel = timer.CreateTimeout(CreateNoOpTimerTask(), TimeSpan.FromSeconds(1));
             Assert.True(timeoutToCancel.Cancel());
 
-            Thread.Sleep(tickDurationMs * 5);
+            Task.Delay(tickDuration * 25).Wait();
 
             var secondLatch = new CountdownEvent(1);
             timer.CreateTimeout(CreateCountdownEventTimerTask(secondLatch), TimeSpan.FromMilliseconds(90));
