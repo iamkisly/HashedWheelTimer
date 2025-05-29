@@ -5,7 +5,7 @@
         /// <summary>
         /// Returns the <see cref="ITimerTask"/> which is associated with this handle.
         /// </summary>
-        ITimerTask Task { get; }
+        ITimerTask TimerTask { get; }
 
         /// <summary>
         /// Returns <c>true</c> if and only if the <see cref="ITimerTask"/> associated
@@ -24,7 +24,7 @@
         /// If the task has been executed or canceled already, it will return with
         /// no side effect.
         /// </summary>
-        /// <returns>A <see cref="Task"/> representing the asynchronous operation. Returns <c>true</c> if the cancellation completed successfully, otherwise <c>false</c>.</returns>
+        /// <returns>A <see cref="TimerTask"/> representing the asynchronous operation. Returns <c>true</c> if the cancellation completed successfully, otherwise <c>false</c>.</returns>
         bool Cancel();
     }
 }

@@ -103,7 +103,7 @@ namespace HashedWheelTimer
             timeout.Deadline += timeout.Interval;
             var (remaining, bucketIndex) = CalculateTimeoutPosition(timeout.Deadline);
             timeout.RemainingRounds = remaining;
-            timeout.RecurringRounds--;
+            timeout.RecurringRoundsDecrease();
             _buckets[bucketIndex].AddTimeout(timeout);
         }
 
@@ -216,7 +216,7 @@ namespace HashedWheelTimer
                     count--;
                     if (timeout.Canceled) continue;
 
-                    timeout.RemainingRounds--;
+                    timeout.RemainingRoundsDecrease();
                     if (timeout.RemainingRounds > 0)
                         _remainingTimeouts.Enqueue(timeout);
                     else
@@ -230,14 +230,42 @@ namespace HashedWheelTimer
             Action<HashedWheelTimeout>? onComplete = null
         ) : ITimeout
         {
+            private long _deadlineTicks = deadline.Ticks;
+            private int _remaining = remaining;
+            private int _recurring = recurring;
+
             public long Id => id;
-            public TimeSpan Deadline { get; internal set; } = deadline;
+            public ITimerTask TimerTask => task;
+
+            public TimeSpan Deadline 
+            {
+                get => TimeSpan.FromTicks(Volatile.Read(ref _deadlineTicks));
+                internal set => Volatile.Write(ref _deadlineTicks, value.Ticks);
+            }
             public TimeSpan Interval { get; } = interval;
 
-            public ITimerTask Task { get; } = task;
-            public int RemainingRounds { get; internal set; } = remaining;
-            public int RecurringRounds { get; internal set; } = recurring;
-            private TimerState State { get; set; } = TimerState.None;
+            public int RemainingRounds 
+            {
+                get => Volatile.Read(ref _remaining);
+                internal set => Volatile.Write(ref _remaining, value);
+            }
+            internal void RemainingRoundsDecrease() => Interlocked.Decrement(ref _remaining);
+
+            public int RecurringRounds
+            {
+                get => Volatile.Read(ref _recurring);
+                internal set => Volatile.Write(ref _recurring, value);
+            }
+            internal void RecurringRoundsDecrease() => Interlocked.Decrement(ref _recurring);
+
+            // race condition avoid 
+            private int _state;
+            internal TimerState State
+            {
+                get => (TimerState)Volatile.Read(ref _state);
+                set => Volatile.Write(ref _state, (int)value);
+            }
+
             public bool Expired => State == TimerState.Expired;
             public bool Canceled => State == TimerState.Canceled;
 
@@ -251,7 +279,12 @@ namespace HashedWheelTimer
                     onComplete?.Invoke(this);
                     State = TimerState.Expired;
                 }
-                await Task.RunAsync(this, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await TimerTask.RunAsync(this, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { State = TimerState.Canceled; }
+                catch (Exception ex) {}
             }
 
             public bool Cancel()
