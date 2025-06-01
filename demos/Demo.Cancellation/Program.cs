@@ -35,7 +35,7 @@ namespace Demo
                 var now = PreciseTimeSpanExtensions.Elapsed;
                 for (var i = 1; i <= 10; i++)
                 {
-                    var timeout = timer.CreateTimeout(new ActionTimerTask<bool>(timeout =>
+                    var timeout = timer.CreateTimeout(new ActionTimerTask<bool>((timeout, _) =>
                     {
                         Console.WriteLine($"Timeout {(timeout.Expired ? "- Expired" : "")} {PreciseTimeSpanExtensions.Elapsed - now}");
                         return ValueTask.FromResult(true);
