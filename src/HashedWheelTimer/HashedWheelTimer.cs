@@ -58,7 +58,7 @@ namespace HashedWheelTimer
         private PreciseTimeSpan StartTime { get; set; }
         private long _timeoutId = -1;
 
-        public ITimeout CreateTimeout(ITimerTask task, TimeSpan delay, int reccuring = 0)
+        public ITimeout CreateTimeout(ITimerTask task, TimeSpan delay, int recurring = 0)
         {
             ArgumentNullException.ThrowIfNull(task);
             if (_worker.Shutdown)
@@ -87,7 +87,7 @@ namespace HashedWheelTimer
                 deadline: deadline, 
                 interval: delay, 
                 remaining: remaining,
-                recurring: reccuring,
+                recurring: recurring,
                 onComplete: (timeout) =>
                 {
                     if (_maxPendingTimeouts > 0)
@@ -126,7 +126,7 @@ namespace HashedWheelTimer
             return _buckets.SelectMany(bucket => bucket.UnprocessedTimeouts);
         }
 
-        (int bucketIndex, int remainingRounds) CalculateTimeoutPosition(TimeSpan deadline)
+        private (int bucketIndex, int remainingRounds) CalculateTimeoutPosition(TimeSpan deadline)
         {
             var calculated = deadline.Ticks / _tickDuration;
             var tick = _worker.Tick;
@@ -260,7 +260,8 @@ namespace HashedWheelTimer
 
             // race condition avoid 
             private int _state;
-            internal TimerState State
+
+            private TimerState State
             {
                 get => (TimerState)Volatile.Read(ref _state);
                 set => Volatile.Write(ref _state, (int)value);
