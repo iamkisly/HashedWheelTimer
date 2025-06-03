@@ -1,13 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace HashedWheelTimer.Contract;
 
-namespace HashedWheelTimer
+public interface ITimerFactory
 {
-    public interface ITimerFactory
-    {
-        HashedWheelTimer Create();
-    }
+    HashedWheelTimer Create();
 }

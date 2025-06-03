@@ -1,14 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿namespace HashedWheelTimer.Contract;
 
-namespace HashedWheelTimer
+public interface ITimeoutFactory<TTimeout> where TTimeout : class, ITimeout
 {
-    public interface ITimeoutFactory<TTimeout> where TTimeout : class, ITimeout
-    {
-        TTimeout Create();
-        void Return(TTimeout timeout);
-    }
+    TTimeout Create();
+    void Return(TTimeout timeout);
 }

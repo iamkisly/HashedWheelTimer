@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Xunit.Abstractions;
 using HashedWheelTimer;
+using HashedWheelTimer.Contract;
 using Microsoft.Extensions.Logging;
 
 namespace TimerTest
@@ -41,7 +42,7 @@ namespace TimerTest
             var barrier = new CountdownEvent(1);
             var timeout = timer.CreateTimeout(
                 new ActionTimerTask<bool>(
-                    t =>
+                    (timeout, token) =>
                     {
                         Assert.Fail("This should not have run");
                         return ValueTask.FromResult(barrier.Signal());
@@ -64,7 +65,7 @@ namespace TimerTest
             var barrier = new CountdownEvent(1);
             var timeout = timer.CreateTimeout(
                 new ActionTimerTask<bool>(
-                    t => ValueTask.FromResult(barrier.Signal())
+                    (timeout, token) => ValueTask.FromResult(barrier.Signal())
                 ),
                 TimeSpan.FromSeconds(2));
             timer.RunAsync(CancellationToken.None);
@@ -86,7 +87,7 @@ namespace TimerTest
             for (var i = 0; i < 3; i++)
             {
                 timerProcessed.CreateTimeout(
-                    new ActionTimerTask<bool>(t => ValueTask.FromResult(latch.Signal())),
+                    new ActionTimerTask<bool>((timeout, token) => ValueTask.FromResult(latch.Signal())),
                     TimeSpan.FromMilliseconds(1)
                 );
             }
@@ -102,7 +103,8 @@ namespace TimerTest
             timerUnprocessed.RunAsync(CancellationToken.None);
             for (var i = 0; i < 5; i++)
             {
-                timerUnprocessed.CreateTimeout(new ActionTimerTask<bool>(_ => ValueTask.FromResult(true)), TimeSpan.FromSeconds(5));
+                timerUnprocessed.CreateTimeout(new ActionTimerTask<bool>(
+                    (timeout, _) => ValueTask.FromResult(true)), TimeSpan.FromSeconds(5));
             }
             
             await Task.Delay(1000); // Simulate delay
@@ -123,7 +125,7 @@ namespace TimerTest
             for (var i = 0; i < 3; i++)
             {
                 timer.CreateTimeout(
-                    new ActionTimerTask<bool>(t => ValueTask.FromResult(latch.Signal())),
+                    new ActionTimerTask<bool>((timeout, token) => ValueTask.FromResult(latch.Signal())),
                     TimeSpan.FromMilliseconds(1)
                 );
             }
@@ -148,7 +150,7 @@ namespace TimerTest
             
             var latch = new CountdownEvent(3);
             ActionTimerTask<bool>? task = null;
-            task = new ActionTimerTask<bool>(t =>
+            task = new ActionTimerTask<bool>((timeout, token) =>
             {
                 timer.CreateTimeout(task, TimeSpan.FromMilliseconds(100));
                 return ValueTask.FromResult(latch.Signal());
@@ -179,7 +181,7 @@ namespace TimerTest
             {
                 var start = PreciseTimeSpanExtensions.Elapsed;
                 timer.CreateTimeout(
-                    new ActionTimerTask<bool>(t =>
+                    new ActionTimerTask<bool>((timeout, token) =>
                     {
                         queue.Enqueue(PreciseTimeSpanExtensions.Elapsed - start);
                         return ValueTask.FromResult(true);
@@ -277,8 +279,10 @@ namespace TimerTest
         }
 
 
-        private static ITimerTask CreateNoOpTimerTask() => new ActionTimerTask<bool>(_ => ValueTask.FromResult(true));
-        static ActionTimerTask<bool> CreateCountdownEventTimerTask(CountdownEvent latch) => new(t => ValueTask.FromResult(latch.Signal()));
+        private static ITimerTask CreateNoOpTimerTask() 
+            => new ActionTimerTask<bool>((timeout, _) => ValueTask.FromResult(true));
+        static ActionTimerTask<bool> CreateCountdownEventTimerTask(CountdownEvent latch) 
+            => new((timeout, token) => ValueTask.FromResult(latch.Signal()));
     }
 
 }
