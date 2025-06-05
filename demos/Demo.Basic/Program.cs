@@ -37,11 +37,11 @@ namespace Demo
             var preciseStartTime = PreciseTimeSpanExtensions.Elapsed;
             
             // VoidResultTimerTask does not return any value
-            var timeout0 = timer.CreateTimeout(new VoidResultTimerTask((timeout, token) =>
+            var timeout0 = timer.CreateTimeout(new VoidTimerTask((timeout, token) =>
             {
                 var elapsed = PreciseTimeSpanExtensions.Elapsed - preciseStartTime;
                 Console.WriteLine($"{elapsed} timeout0 (void)");
-                return ValueTask.CompletedTask;
+                return default;
             }), TimeSpan.FromSeconds(5));
             
             var timeout1 = timer.CreateVoidTimeout((timeout, token) =>
@@ -69,14 +69,14 @@ namespace Demo
             
             // Tasks that repeat at equal intervals. The recurring parameter defines the number of repetitions.
             // Therefore, the number of runs will be "recurring +1".
-            var timeout4 = timer.CreateTimeout(new VoidResultTimerTask((timeout, token)  =>
+            var timeout4 = timer.CreateTimeout(new VoidTimerTask((timeout, token)  =>
             {
                 var elapsed = PreciseTimeSpanExtensions.Elapsed - preciseStartTime;
                 Console.WriteLine($"{elapsed} timeout4 (void recurring) {(timeout.Expired ? "- Expired" : "")}");
-                return ValueTask.CompletedTask;
+                return default;
             }), delay: TimeSpan.FromSeconds(1), recurring: 2);
             
-            var timeout5 = timer.CreateTimeout(new RecurringActionTimerTask<TimeSpan>((timeout, token)  =>
+            var timeout5 = timer.CreateTimeout(new RecurringTimerTask<TimeSpan>((timeout, token)  =>
             {
                 var elapsed = PreciseTimeSpanExtensions.Elapsed - preciseStartTime;
                 Console.WriteLine($"{elapsed} timeout5 (recurring) {(timeout.Expired ? "- Expired" : "")}");
@@ -108,11 +108,11 @@ namespace Demo
             // Now timeout7 must run before This was a bad example, but it illustrates well that the timer
             // should not be locked. Otherwise you will stop all the tasks in the wheel.
             
-            var timeout7 = timer.CreateTimeout(new VoidResultTimerTask((timeout, token)  =>
+            var timeout7 = timer.CreateTimeout(new VoidTimerTask((timeout, token)  =>
             {
                 var elapsed = PreciseTimeSpanExtensions.Elapsed - preciseStartTime;
                 Console.WriteLine($"{elapsed} timeout7 (void) {(timeout.Expired ? "- Expired" : "")}");
-                return ValueTask.CompletedTask;
+                return default;
             }), TimeSpan.FromSeconds(13));            
             
             // Delay so that all timeouts have time to work out,

@@ -14,6 +14,7 @@ namespace HashedWheelTimer;
 
 public sealed partial class HashedWheelTimer : ITimer
 {
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<HashedWheelTimer> _logger;
 
     private readonly long _maxPendingTimeouts;
@@ -29,9 +30,11 @@ public sealed partial class HashedWheelTimer : ITimer
     private readonly Worker _worker;
     private readonly int _maxDOP;
 
-    public HashedWheelTimer(IHashedWheelTimerConfig config, ILogger<HashedWheelTimer> logger)
+    public HashedWheelTimer(IHashedWheelTimerConfig config, ILoggerFactory loggerFactory)
     {
-        _logger = logger;
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<HashedWheelTimer>();
+        
         _tickInterval = config.TickInterval;
         _tickDuration = config.TickInterval.Ticks;
         _bucketCount = config.BucketCount;
@@ -62,7 +65,13 @@ public sealed partial class HashedWheelTimer : ITimer
     private PreciseTimeSpan StartTime { get; set; }
     private long _timeoutId = -1;
     
-
+    /// <summary>
+    /// Creates a new timeout. Throws RejectedExecutionException if MaxPendingTimeouts exceeded.
+    /// </summary>
+    /// <param name="task">The timer task to execute.</param>
+    /// <param name="delay">Delay before execution.</param>
+    /// <param name="recurring">Number of recurrences.</param>
+    /// <exception cref="RejectedExecutionException">If MaxPendingTimeouts limit is reached.</exception>
     public ITimeout CreateTimeout(ITimerTask task, TimeSpan delay, int recurring = 0)
     {
         ArgumentNullException.ThrowIfNull(task);
@@ -131,7 +140,9 @@ public sealed partial class HashedWheelTimer : ITimer
         _worker.Stop();
         return _buckets.SelectMany(bucket => bucket.UnprocessedTimeouts);
     }
-
+    
+    public Action<Exception, ITimeout>? OnUnhandledException { get; set; }    
+    
     private (int bucketIndex, int remainingRounds) CalculateTimeoutPosition(TimeSpan deadline)
     {
         var calculated = deadline.Ticks / _tickDuration;
@@ -142,168 +153,7 @@ public sealed partial class HashedWheelTimer : ITimer
         var bucketIndex = Math.Max(calculated, tick) & _mask;
         return ((int)remaining, (int)bucketIndex);
     }
-
-    [DebuggerDisplay("Count = {DebugCount}")]
-    private sealed class HashedWheelBucket(Action<HashedWheelTimeout>? onRecurring = null)
-    {
-        private readonly ConcurrentQueue<HashedWheelTimeout> _currentTickTimeouts = new();
-        private readonly ConcurrentQueue<HashedWheelTimeout> _remainingTimeouts = new();
-
-        // Для диагностики — считается быстро, не O(n)
-        internal int DebugCount => _currentTickTimeouts.Count + _remainingTimeouts.Count;
-
-        public void AddTimeout(HashedWheelTimeout timeout)
-        {
-            if (timeout.RemainingRounds <= 0)
-                _currentTickTimeouts.Enqueue(timeout);
-            else
-                _remainingTimeouts.Enqueue(timeout);
-        }
-
-        public void Clear()
-        {
-            _currentTickTimeouts.Clear();
-            _remainingTimeouts.Clear();
-        }
-
-        public IEnumerable<HashedWheelTimeout> UnprocessedTimeouts
-        {
-            get
-            {
-                foreach (var timeout in _remainingTimeouts)
-                    yield return timeout;
-        
-                foreach (var timeout in _currentTickTimeouts)
-                    yield return timeout;
-            }
-        }
-
-        public async Task ExpireTimeoutsAsync(TimeSpan deadline, int maxDOP, CancellationToken cancellationToken)
-        {
-            var semaphore = new SemaphoreSlim(maxDOP);
-            var tasks = new List<Task>();
-
-            while (!cancellationToken.IsCancellationRequested && _currentTickTimeouts.TryDequeue(out var timeout))
-            {
-                if (timeout.Canceled) continue;
-                if (timeout.Deadline > deadline) continue;
-                    
-                await semaphore.WaitAsync(cancellationToken);
-                tasks.Add(Task.Run(async () =>
-                {
-                    try
-                    {
-                        await timeout.ExpireAsync(cancellationToken);
-                        if (timeout is { RecurringRounds: > 0, Canceled: false }) 
-                        {
-                            onRecurring?.Invoke(timeout);
-                        }
-                    }
-                    finally 
-                    { 
-                        semaphore.Release(); 
-                    }
-                }, cancellationToken));
-            }
-
-            if (tasks.Count > 0)
-            {
-                await Task.WhenAll(tasks);
-            }
-        }
-
-        public void ReduceRound(CancellationToken cancellationToken)
-        {
-            var count = _remainingTimeouts.Count;
-            while (count > 0 && !cancellationToken.IsCancellationRequested)
-            {
-                if (!_remainingTimeouts.TryDequeue(out var timeout)) break;
-
-                count--;
-                if (timeout.Canceled) continue;
-
-                timeout.RemainingRoundsDecrease();
-                if (timeout.RemainingRounds > 0)
-                    _remainingTimeouts.Enqueue(timeout);
-                else
-                    _currentTickTimeouts.Enqueue(timeout);
-            }
-        }
-    }
-        
-    private sealed class HashedWheelTimeout(
-        long id, ITimerTask task, TimeSpan deadline, TimeSpan interval, int remaining = 0, int recurring = 0, 
-        Action<HashedWheelTimeout>? onComplete = null
-    ) : ITimeout
-    {
-        private long _deadlineTicks = deadline.Ticks;
-        private int _remaining = remaining;
-        private int _recurring = recurring;
-
-        public long Id => id;
-        public ITimerTask TimerTask => task;
-
-        public TimeSpan Deadline 
-        {
-            get => TimeSpan.FromTicks(Volatile.Read(ref _deadlineTicks));
-            internal set => Volatile.Write(ref _deadlineTicks, value.Ticks);
-        }
-        public TimeSpan Interval { get; } = interval;
-
-        public int RemainingRounds 
-        {
-            get => Volatile.Read(ref _remaining);
-            internal set => Volatile.Write(ref _remaining, value);
-        }
-        internal void RemainingRoundsDecrease() => Interlocked.Decrement(ref _remaining);
-
-        public int RecurringRounds
-        {
-            get => Volatile.Read(ref _recurring);
-            internal set => Volatile.Write(ref _recurring, value);
-        }
-        internal void RecurringRoundsDecrease() => Interlocked.Decrement(ref _recurring);
-
-        // race condition avoid 
-        private int _state;
-
-        private TimerState State
-        {
-            get => (TimerState)Volatile.Read(ref _state);
-            set => Volatile.Write(ref _state, (int)value);
-        }
-
-        public bool Expired => State == TimerState.Expired;
-        public bool Canceled => State == TimerState.Canceled;
-
-        public async Task ExpireAsync(CancellationToken cancellationToken)
-        {
-            if (State is TimerState.Expired or TimerState.Canceled)
-                return;
-
-            if (RecurringRounds <= 0 && !Canceled)
-            {
-                onComplete?.Invoke(this);
-                State = TimerState.Expired;
-            }
-            try
-            {
-                await TimerTask.RunAsync(this, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) { State = TimerState.Canceled; }
-            catch (Exception ex) {}
-        }
-
-        public bool Cancel()
-        {
-            if (State is TimerState.Canceled)
-                return false;
-
-            State = TimerState.Canceled;
-            return true;
-        }
-    }
-
+    
     private enum TimerState
     {
         None,

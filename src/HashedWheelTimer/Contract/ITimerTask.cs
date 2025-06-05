@@ -16,9 +16,18 @@ namespace HashedWheelTimer.Contract
         ValueTask RunAsync(ITimeout timeout, CancellationToken cancellationToken);
     }
     
-    public interface ITimerTask<TResult> : ITimerTask
+    /// <summary>
+    /// User timer tasks must be thread-safe if MaxDOP > 1.
+    /// </summary>
+    public interface IAwaitableTimerTask<TResult> : ITimerTask
     {
         Task<TResult> ResultTask { get; }
         TaskAwaiter<TResult> GetAwaiter() => ResultTask.GetAwaiter();
+    }
+    
+    public interface IAwaitableTimerTask : ITimerTask
+    {
+        Task ResultTask { get; }
+        TaskAwaiter GetAwaiter() => ResultTask.GetAwaiter();
     }
 }

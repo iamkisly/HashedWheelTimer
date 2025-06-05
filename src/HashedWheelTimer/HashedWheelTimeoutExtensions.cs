@@ -6,8 +6,8 @@ public static class HashedWheelTimeoutExtensions
 {
     public static async IAsyncEnumerable<TResult> GetEnumerableResult<TResult>(this ITimeout timeout)
     {
-        if (timeout.TimerTask is not ITimerTask<IEnumerable<TResult>> timerTask) yield break;
-        foreach (var item in await timerTask)
+        if (timeout.TimerTask is not IAwaitableTimerTask<IAsyncEnumerable<TResult>> timerTask) yield break;
+        await foreach (var item in await timerTask)
         {
             yield return item;
         }
@@ -15,7 +15,7 @@ public static class HashedWheelTimeoutExtensions
 
     public static async ValueTask<TResult> GetResult<TResult>(this ITimeout timeout)
     {
-        if (timeout.TimerTask is ITimerTask<TResult> taskResult)
+        if (timeout.TimerTask is IAwaitableTimerTask<TResult> taskResult)
         {
             return await taskResult;
         }
@@ -24,7 +24,7 @@ public static class HashedWheelTimeoutExtensions
     
     public static async Task ExecuteVoidTask(this ITimeout timeout)
     {
-        if (timeout.TimerTask is ITimerTask<object?> timerTask)
+        if (timeout.TimerTask is IAwaitableTimerTask timerTask)
             await timerTask.ResultTask;
     }
 }

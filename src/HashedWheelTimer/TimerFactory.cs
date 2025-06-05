@@ -165,8 +165,7 @@ public class TimerFactory(ILoggerFactory loggerFactory) : ITimerFactory
                     string.Join("\n", errors.Select(e => e.ErrorMessage)));
             }
                 
-            var logger = _loggerFactory.CreateLogger<HashedWheelTimer>();
-            return new HashedWheelTimer(this, logger);
+            return new HashedWheelTimer(this, _loggerFactory);
         }
     }
 }
